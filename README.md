@@ -1,3 +1,5 @@
+[中文说明](读我.md)
+
 # FFmpeg BAT scripts
 FFmpeg BAT scripts to do some simple video/audio edits
 
@@ -6,4 +8,6 @@ Download [ffmpeg](https://www.gyan.dev/ffmpeg/builds/), extract it to a folder, 
 
 Download the bat scripts, put them to a folder, add that folder to path.
 
-Use explorer to navigate to the folder containing your video/audio files, open a terminal there (Press Shift and right click, select open PowerShell here) and use the scripts by type the name of the script file and arguments into the terminal. Check that you might need to type extra arguments when ffmpeg is running, for example "y" to agree to replace existing file with the same name.
+## Note that to use bat scripts with Chinese characters, you need to change the character encoding to ANSI. Edit with notepad, choose "save as", pick ANSI as the encoding type.
+
+Use explorer to navigate to the folder containing your video/audio files, open a terminal there (Press Shift and right click, select open PowerShell here) and use the scripts by typing the name of the script file and arguments into the terminal, separated by space(s). Check that you might need to type extra arguments when ffmpeg is running, for example "y" to agree to replace existing file with the same name.
