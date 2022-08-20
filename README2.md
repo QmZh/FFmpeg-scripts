@@ -33,7 +33,7 @@ Use explorer to navigate to the folder containing your video/audio files, open a
 06-vid2pic: extracts pictures frame by frame, given time interval or start time and frame count. Tips: cut the video first, then extracting pictures would be a lot faster.
 
 ## planning
-### I have codes for most of the following functions, but I need to polish them.
+### I have scripts for most of the following functions, but I need to polish them.
 
 audio: mixes BGM with shortest or longest alignment, changes audio speed/volume;
 
