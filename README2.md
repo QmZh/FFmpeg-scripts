@@ -32,10 +32,12 @@ Use explorer to navigate to the folder containing your video/audio files, open a
 
 06-vid2pic: extracts pictures frame by frame, given time interval or start time and frame count. Tips: cut the video first, then extracting pictures would be a lot faster.
 
+07-audio-change-volume: changes audio volume for video or audio.
+
 ## planning
 ### I have scripts for most of the following functions, but I need to polish them.
 
-audio: mixes BGM with shortest or longest alignment, changes audio speed/volume;
+audio: mixes BGM with shortest or longest alignment, changes audio speed;
 
 subtitle: adds, removes or extracts soft subtitle(mp4 or mkv), adds hard subtile(needs video recoding);
 
