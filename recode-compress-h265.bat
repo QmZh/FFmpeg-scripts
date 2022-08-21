@@ -1,0 +1,4 @@
+echo "input file, bitrate(1M by default), output file(no need now). (recodes to hevc(h265), copies audio, removes duplicate frames)"
+if "%~2"=="" (ffmpeg  -hwaccel cuda -i %1 -vf mpdecimate -vsync vfr -c:v hevc_nvenc -preset p7 -rc:v vbr -b:v 1M -2pass true -rc-lookahead 60 -bf:v 5 -profile:v rext -level 6.2 -tier high -c:a copy "%~n1-recode-h265-1M.mp4") else (ffmpeg  -hwaccel cuda -i %1 -vf mpdecimate -vsync vfr -c:v hevc_nvenc -preset p7 -rc:v vbr -b:v %2 -2pass true -rc-lookahead 60 -bf:v 5 -profile:v rext -level 6.2 -tier high -c:a copy "%~n1-recode-h265-%2.mp4")
+:: "-vf mpdecimate -vsync vfr" removes duplicate frames
+:: "-c:a copy" copies audio
