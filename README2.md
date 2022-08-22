@@ -34,6 +34,8 @@ Use explorer to navigate to the folder containing your video/audio files, open a
 
 07-audio-change-volume: changes audio volume for video or audio.
 
+08-crop-and-merge: cut part of the video out, merge two or three videos horizontally
+
 ## editing
 audio: changes audio speed;
 
@@ -41,7 +43,7 @@ subtitle: adds, removes or extracts soft subtitle(mp4 or mkv), adds hard subtile
 
 without recoding: changes video fps so that changes video speed;
 
-recoding: recoding to h264/h265, removing duplicated frames, set target bitrate, change pixel width and height, cut part of the video out, merge two or more videos vertically or horizontally or overlay one over another, creating one-colored video, create silent audio;
+recoding: recoding to h264/h265, removing duplicated frames, set target bitrate, change pixel width and height, creating one-colored video, create silent audio;
 
 to concatenate and recoding in one script and does not write internal files to disk;
 
@@ -50,4 +52,4 @@ audio: mixes BGM with shortest or longest alignment;
 
 no recoding: rotates a video(n*90 degree only);
 
-recoding: set target file size, creating video from pictures and setting fps;
+recoding: set target file size, creating video from pictures and setting fps, merge two or more videos vertically, overlay many videos over another;
