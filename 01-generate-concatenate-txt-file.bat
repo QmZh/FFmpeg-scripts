@@ -1,3 +1,0 @@
-@echo off
-if "%~1"=="" (echo "Input: postfix without dot, txt file name(Not needed and defaults to i.txt. if present, will be "basename_part".txt. For example, a.b will be a.txt)" & echo "Note that the txt file will be ANSI encoded. If the names of the audio/video files contain Chinese, change the txt file's encoding to UTF-8 or ffmpeg cannot concatenate them." & echo "The txt file will look like several lines of file 'silence.mp3' \ file 'song.mp3' \ file 'silence2.mp3'" & echo "The order of files is alphabetical, you can edit it after running this bat script" & exit)
-if "%~2"=="" ((for %%i in (*.%1) do @echo file '%%i') > i.txt) else ((for %%i in (*.%1) do @echo file '%%i') > "%~n2.txt")
