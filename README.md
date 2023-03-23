@@ -8,6 +8,8 @@ FFmpeg bat脚本，可以做一些简单的音视频编辑。
 # 如何使用
 下载 [ffmpeg](https://www.gyan.dev/ffmpeg/builds/), 解压到文件夹, 把子文件夹里的bin文件夹，也就是含有ffmpeg.exe的文件夹添加到环境变量path里. 例如，[直接下载链接, 发布核心版(release essentials)](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z) (这应该是那个网站上的最小版本)。
 
+## Tips: 只有一个输入参数的脚本，可以drag&drop, 也就是拖动文件到脚本使用
+
 下载bat脚本，放到一个文件夹，把文件夹加入环境变量path。
 
 ### 注意，使用包含中文的bat脚本，需要用ANSI编码。操作是，用Notepad(记事本)编辑，另存为的时候选择编码为ANSI。
@@ -33,7 +35,7 @@ FFmpeg bat脚本，可以做一些简单的音视频编辑。
 
 07-改变音量；改变视频或音频的音量
 
-08-crop-and-merge_剪切画面并合并视频：剪切部分画面，横向合并两个或三个视频
+08-剪切画面并合并视频：剪切部分画面，横向合并两个或三个视频
 
 ## 编辑中
 

@@ -8,6 +8,8 @@ For now, I'm writing for my nvidia rtx 2070 laptop version. For most scripts tha
 # How to use
 Download [ffmpeg](https://www.gyan.dev/ffmpeg/builds/), extract it to a folder, add that bin subfolder to path, which contains ffmpeg.exe. For example, [direct link(release essentials)](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z) (this should be the smallest build on that site).
 
+## Tips: For scripts with only one input parameter, you can drag&drop
+
 Download the bat scripts, put them to a folder, add that folder to path.
 
 ### Note that to use bat scripts with Chinese characters, you need to change the character encoding to ANSI. Edit with notepad, choose "save as", pick ANSI as the encoding type.
