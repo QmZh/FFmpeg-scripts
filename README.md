@@ -1,6 +1,6 @@
 ### [English README](README2.md)
 
-[批量重新编码](batch-recode-ps1-bat-批量转码压缩PowerShell和batch脚本\README.md)
+[批量重新编码](batch-recode-ps1-bat\README.md)
 
 
 # FFmpeg BAT 脚本
