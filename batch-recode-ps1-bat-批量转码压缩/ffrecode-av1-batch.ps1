@@ -14,13 +14,13 @@ param(
     [String]$fps = "",
 
     [Alias("a","all")]
-    [String]$full = "",
+    [String]$full = "y",
 
     [Alias("de")]
-    [String]$delete_origin_on_recoding = "",
+    [String]$delete_origin_on_recoding = "y",
 
     [Alias("r","cr","crt")]
-    [double]$compress_ratio_threshold = 0.7
+    [double]$compress_ratio_threshold = 0.6
 )
 
 Write-Output "arguments are -wd/-WorkingDirectory $($WorkingDirectory) (defaults to current directory .), -t/-type/-InputFileType $($InputFileType) (defaults to flv, use * for matching any files), -q/-cq $($cq) (empty for auto deciding, provide a number between 0 and 51 for fixed cq value), -f/-fps $($fps) (empty for keeping original fps), -a/-all/-full $($full) (y to include poor quality video files that are often not worth it to recode them), -de/-delete_origin_on_recoding $($delete_origin_on_recoding) (y for deletion, will not delete if duration is shorter than 0.99 of origin, will not delete if recoded file bitrate is larger in which case the recoded file will be deleted), -r/-cr/-crt/-compress_ratio_threshold $($compress_ratio_threshold) (accepted compress ratio, under would pass)`n"
@@ -37,8 +37,10 @@ Get-ChildItem $WorkingDirectory -Recurse -Filter *.$InputFileType | ForEach-Obje
     $InputFileFullPath = $_.FullName
     Write-Output "Input:"
     Write-Output $InputFileFullPath
-    Write-Output "Input file size is $($_.Length)"
-    if ($_.Length -lt 30000) {
+
+    $InputFileSize = $_.Length
+    Write-Output "Input file size is $($InputFileSize)"
+    if ($InputFileSize -lt 300000) {
         Write-Error "file too small, skipping"
         return # bruh, this means continue in ForEach-Object
     }
@@ -52,7 +54,7 @@ Get-ChildItem $WorkingDirectory -Recurse -Filter *.$InputFileType | ForEach-Obje
     if ($width -lt $height) {
         $shorter_side = $width
     }
-    if ( ($full -eq "y") -or ($shorter_side -GT 1439) -or (($shorter_side -GT 1023) -and ($bitrate -GT 1600000)) -or (($shorter_side -GT 719) -and ($bitrate -GT 1400000)) -or (($shorter_side -GT 479) -and ($bitrate -GT 1200000)) ) {
+    if ( ($full -eq "y") -or ($shorter_side -GT 1439) -or (($shorter_side -GT 1023) -and ($bitrate -GT 1600000)) -or (($shorter_side -GT 719) -and ($bitrate -GT 1200000)) -or (($shorter_side -GT 479) -and ($bitrate -GT 1000000)) ) {
         if (!$cq_provided) {
             if ($shorter_side -lt 720) {
                 # (, 720p)
@@ -103,7 +105,9 @@ Get-ChildItem $WorkingDirectory -Recurse -Filter *.$InputFileType | ForEach-Obje
         
         Write-Output ""
         Write-Output "Output:"
-        $OutputFileFullPath = $InputFileFullPath.Split(".")[0]+"_cq-$($cq)_fps-$($fps).mp4"
+        $OutputFileFullPath = $_.DirectoryName+"\"+$_.BaseName+"_cq-$($cq)_fps-$($fps).mp4"
+        
+
         ffrecode-av1.bat $InputFileFullPath $cq $fps # ffrecode-av1.bat 应该换成一个压缩的函数？
 
         $new_duration = [double]$(ffprobe -v error -show_entries format=duration -hide_banner -of default=noprint_wrappers=1:nokey=1 -i $OutputFileFullPath)
@@ -120,19 +124,24 @@ Get-ChildItem $WorkingDirectory -Recurse -Filter *.$InputFileType | ForEach-Obje
                     Write-Output "Deleting original file!"
                     Remove-Item $InputFileFullPath
                 }
-            }elseif ($new_bitrate -gt $bitrate){
-                Write-Output "new bitrate is above the original one!"
+            }
+            # elseif ($new_bitrate -gt $bitrate){
+            #     Write-Output "new bitrate is above the original one!"
+            #     if ($delete_origin_on_recoding -eq "y"){
+            #         Write-Error "Not deleting original file!"
+            #     }
+            #     Write-Error "Deleting compressed file?!"
+            #     Remove-Item $OutputFileFullPath
+                
+            # }
+            else {
+                Write-Error "new bitrate is above $($compress_ratio_threshold) of the original one. But still a compress. Might recheck?"
                 if ($delete_origin_on_recoding -eq "y"){
                     Write-Error "Not deleting original file!"
                 }
                 Write-Error "Deleting compressed file?!"
                 Remove-Item $OutputFileFullPath
                 
-            }else {
-                Write-Output "new bitrate is above $($compress_ratio_threshold) of the original one. But still a compress. Might recheck?"
-                if ($delete_origin_on_recoding -eq "y"){
-                    Write-Error "Not deleting original file!"
-                }
             }
         }
         else {
