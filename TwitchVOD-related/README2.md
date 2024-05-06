@@ -1,3 +1,5 @@
+### [中文说明](README.md)
+
 credits: ChatGPT translated this, thanks very much.
 
 If you're using [Xtra](https://github.com/crackededed/Xtra) and [TwitchDownloader](https://github.com/lay295/TwitchDownloader) to download Twitch VODs, you might need this. If you're using Termux on a rooted Android phone in tsu mode, then you can directly use:

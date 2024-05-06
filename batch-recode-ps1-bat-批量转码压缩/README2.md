@@ -1,3 +1,5 @@
+### [中文说明](README.md)
+
 batch recode videos under a folder
 
 ## Usage

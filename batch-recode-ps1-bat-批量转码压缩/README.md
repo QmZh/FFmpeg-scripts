@@ -1,3 +1,5 @@
+### [English README](README2.md)
+
 批量压缩/转码某一文件夹下面的视频。
 
 ## 用途

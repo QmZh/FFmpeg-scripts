@@ -1,3 +1,5 @@
+### [English README](README2.md)
+
 # FFmpeg BAT 脚本
 FFmpeg bat脚本，可以做一些简单的音视频编辑。
 
