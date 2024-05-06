@@ -19,7 +19,7 @@ Ubuntu,以下3个需要TwitchDownloader:
 [twitch_vod_downloader](Termux-tsu/Ubuntu/twitch_vod_downloader) 有些VOD的某些清晰度, Xtra无法下载，需要使用 TwitchDownloader（其实相反情况也有，所以我这两种方式都要保留，另外TwitchDownloader似乎还没有只下载ts文件、合并ts文件但是不合成mp4文件的选项，空间紧张时还是要用Xtra）, 这个需要在一个工作目录下创建文件夹，例如2xxxx720p，然后 “twitch_vod_downloader 工作文件夹 起始时刻 结束时刻”
 
 powershell:
-[ffgenerate_concat_list_numerical.bat](powershell/ffgenerate_concat_list_numerical.bat) 目的是把ts文件拼接起来。需要先把xxx-muted.ts[重命名](powershell\rename-muted.ps1)为xxx.ts. TODO：其实只要解决遍历文件的时候按照numerical顺序而不是字典序就行，但是我没有仔细找。
+[ffgenerate_concat_list_numerical.bat](powershell/ffgenerate_concat_list_numerical.bat) 目的是把ts文件拼接起来。需要先把xxx-muted.ts[重命名](powershell/rename-muted.ps1)为xxx.ts. TODO：其实只要解决遍历文件的时候按照numerical顺序而不是字典序就行，但是我没有仔细找。
 
 
 ## 其它

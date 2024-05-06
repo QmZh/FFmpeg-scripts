@@ -22,7 +22,7 @@ Ubuntu, the following 3 scripts require TwitchDownloader:
 
 powershell:
 
-[ffgenerate_concat_list_numerical.bat](powershell/ffgenerate_concat_list_numerical.bat) is designed to concatenate ts files. First, [rename](powershell\rename-muted.ps1) xxx-muted.ts to xxx.ts. TODO: Actually, just solving the issue of traversing files in numerical order rather than lexicographical order is sufficient, but I haven't looked into it carefully.
+[ffgenerate_concat_list_numerical.bat](powershell/ffgenerate_concat_list_numerical.bat) is designed to concatenate ts files. First, [rename](powershell/rename-muted.ps1) xxx-muted.ts to xxx.ts. TODO: Actually, just solving the issue of traversing files in numerical order rather than lexicographical order is sufficient, but I haven't looked into it carefully.
 
 ## Other
 TODO: Later, I will attempt to set up command-line parameters using the -tag format like in ps1 scripts (tag parameter instead of positional parameter).
