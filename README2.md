@@ -1,4 +1,4 @@
-### [中文说明](README.md)
+### <div align="right">[中文说明](README.md)</div>
 
 [batch recode](batch-recode-ps1-bat-批量转码压缩/README2.md)
 

@@ -1,4 +1,4 @@
-### [English README](README2.md)
+### <div align="right">[English README](README2.md)</div>
 
 # FFmpeg BAT 脚本
 FFmpeg bat脚本，可以做一些简单的音视频编辑。

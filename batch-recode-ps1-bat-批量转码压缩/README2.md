@@ -1,4 +1,4 @@
-### [中文说明](README.md)
+### <div align="right">[中文说明](README.md)</div>
 
 batch recode videos under a folder
 

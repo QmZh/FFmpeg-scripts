@@ -1,4 +1,4 @@
-### [中文说明](README.md)
+### <div align="right">[中文说明](README.md)</div>
 
 credits: ChatGPT translated this, thanks very much.
 

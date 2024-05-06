@@ -1,4 +1,4 @@
-### [中文说明](README.md)
+### <div align="right">[中文说明](README.md)</div>
 
 # FFmpeg BAT scripts
 FFmpeg BAT scripts to do some simple video/audio edits.

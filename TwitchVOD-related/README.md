@@ -1,4 +1,4 @@
-### [English README](README2.md)
+### <div align="right">[English README](README2.md)</div>
 
 如果你在用[Xtra](https://github.com/crackededed/Xtra)和[TwitchDownloader](https://github.com/lay295/TwitchDownloader)下载Twitch VOD, 你可能需要这个。如果你在root的安卓手机的Termux里的tsu模式下使用，那就可以直接用
 

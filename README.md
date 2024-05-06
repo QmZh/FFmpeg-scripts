@@ -1,4 +1,4 @@
-### [English README](README2.md)
+### <div align="right">[English README](README2.md)</div>
 
 [批量重新编码](batch-recode-ps1-bat-批量转码压缩/README.md)
 
