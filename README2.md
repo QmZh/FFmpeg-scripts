@@ -1,5 +1,8 @@
 ### [中文说明](README.md)
 
+[batch recode](batch-recode-ps1-bat-批量转码压缩PowerShell和batch脚本\README2.md)
+
+
 # FFmpeg BAT scripts
 FFmpeg BAT scripts to do some simple video/audio edits.
 
