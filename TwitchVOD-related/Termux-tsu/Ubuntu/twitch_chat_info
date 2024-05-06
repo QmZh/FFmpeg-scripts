@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# #!/path/to/executable is a format
+if [ $# -lt 1 ]; then # if number of parameters/arguments is less than 1
+	WD=$(pwd) # set variable WD (literally working directory) as the output of the commamd pwd. The purpose is that when no arguments given just work on current directory          
+else
+    WD=${1%/} # otherwise, set WD as parameter 1 treated as a string removing / at the tail. The purpose is to work on given directory, whether or not it has a trailing /. Plus, will relative paths like . .. or unspecified paths like * work? . and .. should work, not sure about * though.
+fi
+
+for d in "$WD"/*/; do d=${d%/}; d=${d##*/}; echo "$d"; if test -f "$WD/$d/chats.json.gz"; then gzip -dk "$WD/$d/chats.json.gz"; cut -c 151-1000 "$WD/$d/chats.json"; rm "$WD/$d/chats.json"; else echo "gz file not found"; fi; for i in {1..2}; do echo; done; done > "$WD"/info.txt
+
+
+vim "$WD"/info.txt

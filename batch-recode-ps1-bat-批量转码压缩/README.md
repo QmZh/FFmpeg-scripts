@@ -1,9 +1,9 @@
 批量压缩/转码某一文件夹下面的视频。
 
 ## 用途
-ffget-vid-info.ps1，获得视频信息
+[ffget-vid-info.ps1](ffget-vid-info.ps1)，获得视频信息
 
-ffrecode-av1-batch.ps1，进行重编码，目前需要和ffrecode-av1.bat一块使用，之后准备重写一下变成纯粹的ps1脚本
+[ffrecode-av1-batch.ps1](ffrecode-av1-batch.ps1)，进行重编码，目前需要和[ffrecode-av1.bat](ffrecode-av1.bat)一块使用，之后准备重写一下变成纯粹的ps1脚本
 
 
 ## 其它

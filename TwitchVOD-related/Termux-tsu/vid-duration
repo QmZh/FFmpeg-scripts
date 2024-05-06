@@ -1,0 +1,26 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+if [ $# -lt 1 ]; then
+    d=$(pwd)
+else
+    d=${1%/}
+fi
+
+if [ $# -lt 2 ]; then
+    t_threshold=9.98
+else
+    t_threshold=$2
+fi
+
+echo "parameters: working directory=$d, time threshold=$t_threshold"
+
+if [ -d "$d"/sus ]; then
+    echo "folder $d/sus already exists"
+else
+    mkdir "$d"/sus
+fi
+
+
+# possible problem: for "$t is not a number" case, $(echo "$t > $t_threshold" |bc -l) need to be false
+
+for f in "$d"/*; do t=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$f"); if !(( $(echo "$t > $t_threshold" |bc -l) )); then echo "duration of ${f##*/} is"; echo "$t"; mv "$f" "$d"/sus ; fi; done > "$d/sus/durations-$(date +"%Y_%m_%d_%H_%M_%S").txt"

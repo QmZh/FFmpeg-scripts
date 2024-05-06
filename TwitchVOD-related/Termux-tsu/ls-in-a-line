@@ -1,0 +1,7 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+if [ $# -lt 1 ]; then
+    ls . | xargs printf "%s "
+else
+    ls "$1" | xargs printf "%s "
+fi

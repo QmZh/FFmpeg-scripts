@@ -1,9 +1,9 @@
 batch recode videos under a folder
 
 ## Usage
-ffget-vid-info.ps1, get video info
+[ffget-vid-info.ps1](ffget-vid-info.ps1), get video info
 
-ffrecode-av1-batch.ps1, does recoding, currently needs to use ffrecode-av1.bat. TODO: will rewrite to a function in ps1 script file
+[ffrecode-av1-batch.ps1](ffrecode-av1-batch.ps1), does recoding, currently needs to use [ffrecode-av1.bat](ffrecode-av1.bat). TODO: will rewrite to a function in ps1 script file
 
 
 ## Others

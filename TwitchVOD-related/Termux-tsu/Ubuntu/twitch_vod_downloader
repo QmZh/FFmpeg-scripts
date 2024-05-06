@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# #!/path/to/executable is a format
+
+echo "working folder, start time, end time"
+
+if [ $# -lt 1 ]; then # if number of parameters/arguments is less than 1
+    WD=$(pwd) # set variable WD (literally working directory) as the output of the commamd pwd. The purpose is that when no arguments given just work on current directory
+else
+    WD=${1%/} # otherwise, set WD as parameter 1 treated as a string removing / at the tail. The purpose is to work on given directory, whether or not it has a trailing /. Plus, will relative paths like . .. or unspecified paths like * work? . and .. should work, not sure about * though.
+fi
+
+for d in "$WD"/*/ ; do # matching something ending with /, make sure to operate on folders
+    d=${d%/} # order matters. First remove / at the end
+    d=${d##*/} # order matters. Then remove longest substring ending with a / from left, this way only the folder name is kept
+    echo "$d"
+    VID=${d%%Source*} # VID is d removing Source* from back, max matching
+    VID=${VID%%chunked*}
+    VID=${VID%%audio*}
+#    VID=${VID%2160p*}
+    VID=${VID%%1440p*}
+    VID=${VID%%1152p*}
+    VID=${VID%%1080p*}
+    VID=${VID%%936p*}
+    VID=${VID%%900p*}
+    VID=${VID%%720p*}
+    VID=${VID%%480p*}
+    VID=${VID%%360p*}
+    VID=${VID%%160p*}
+    VID=${VID%%144p*}
+    VID=${VID%%high*}
+    VID=${VID%%medium*}
+    VID=${VID%%low*}
+    VID=${VID%%mobile*}
+    echo "$VID"
+    if [[ $VID == $d ]]; then
+        echo "Not matching pattern"
+    elif test -f "$WD/$d/VOD.mp4"; then
+        echo "exists"
+    else
+	md $WD/$d/tmp/
+	quality=$(echo "$d" | sed "s/$VID//g")
+	if [ $# -lt 2 ]; then
+	    start_time=0
+	else
+	    start_time=$2
+	fi
+	if [ $# -lt 3 ]; then
+	    TwitchDownloaderCLI videodownload -u $VID -o $WD/$d/VOD.mp4 -q $quality --temp-path $WD/$d/tmp/ -b $start_time
+        else
+	    TwitchDownloaderCLI videodownload -u $VID -o $WD/$d/VOD.mp4 -q $quality --temp-path $WD/$d/tmp/ -b $start_time -e $3
+	fi
+#	TwitchDownloaderCLI videodownload -u $VID -o $WD/$d/VOD.mp4 -q $quality --temp-path $WD/$d/tmp/ 
+	echo ""
+	echo "👀🧐🧡💛💚💙💜🤎🖤🤍💘💝💖💗💓💞💕💌💟🌑🌒🌓🌔🌕🌖🌗🌘🎈📱☎️📞📟📠🔌🔋🪫🖲️💽💾💿📀🖥️💻⌨️🖨️🖱️🕯️💡🔦🏮🧱🪟🪞🚪🪑🛏️🛋️🚿🛁🚽🧻🧷🧹🧴🧽🧼🪥🪒☂️🌂💍💎🕶️👓🥽⚗️🧫🧪🌡️💉💊🩺🔭🧬🔬📡🛰️🧯🪓🪜🪣🪝🧲🧰🗜️🔩🪛🪚🔧🔨⚒️🛠️⛏️⚙️🔗⛓️📎🖇️📏📐🖌️🖍️🖊️🖋️✒️✏️📝📖📚📒📔📕📓📗📘📙🔖🗒️📄📃📋📑📂📁🗂️🗃️🗄️📊📈📉📇🪪📌📍✂️🗑️📰🗞️🏷️📦📫📪📬📭📮✉️📧📩📨💌📤📥🗳️🕛🕧🕐🕜🕑🕝🕒🕞🕓🕟🕔🕠🕕🕡🕖🕢🕗🕣🕘🕤🕙🕥🕚🕦⏱️⌚🕰️⌛⏳⏲️⏰📅📆🗓️🪧🛎️🔔📯📢📣🔍🔎🔮🧿🪬📿🏺⚱️⚰️🪦💣🪤📜⚔️🗡️🛡️🗝️🔑🔐🔏🔒🔓✴️🔶🔸🔆🔅📳📲🔈🔉🔊🎼🎵🎶☢️☣️⚠️🚸⚜️🔱〽️🔰✳️❇️♻️❎✅✔️☑️🆗💠🔷🔹🌐➕➖✖️➗🟰©️®️™️🔘🔳◼️◾▪️🔲◻️◽▫️👁️‍🗨️"
+    fi
+
+done
+

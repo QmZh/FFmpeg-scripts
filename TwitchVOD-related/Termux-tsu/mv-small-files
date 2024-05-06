@@ -1,0 +1,19 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+if [ $# -lt 1 ]; then
+	d=$(pwd)
+else
+	d=${1%/}
+fi
+
+if [ $# -lt 2 ]; then
+	max_size=300k
+else
+	max_size=$2
+fi
+
+echo "parameters: working directory=$d, size thresshold=$max_size"
+
+mkdir "$d"/sus
+
+find $d -maxdepth 1 -type f -name '*.ts' -size -$max_size -exec mv -t "$d"/sus {} +
