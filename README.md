@@ -2,6 +2,7 @@
 
 [批量重新编码](batch-recode-ps1-bat-批量转码压缩/README.md)
 
+[Twitch录播相关](TwitchVOD-related/README.md)
 
 # FFmpeg BAT 脚本
 FFmpeg bat脚本，可以做一些简单的音视频编辑。

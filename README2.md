@@ -2,6 +2,7 @@
 
 [batch recode](batch-recode-ps1-bat-批量转码压缩/README2.md)
 
+[TwitchVOD-related](TwitchVOD-related/README2.md)
 
 # FFmpeg BAT scripts
 FFmpeg BAT scripts to do some simple video/audio edits.
