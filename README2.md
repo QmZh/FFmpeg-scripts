@@ -4,4 +4,6 @@
 
 [TwitchVOD-related](TwitchVOD-related/README2.md)
 
+[AMD GPU AV1 Encoding with Subtitle Extraction](amd-windows-av1-with-subtitles/README2.md)
+
 [Others, need polishing](Others/README2.md)

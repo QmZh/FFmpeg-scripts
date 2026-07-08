@@ -4,4 +4,6 @@
 
 [Twitch录播相关](TwitchVOD-related/README.md)
 
+[AMD 显卡 AV1 编码 + 字幕提取](amd-windows-av1-with-subtitles/README.md)
+
 [其它，待整理](Others/README.md)
