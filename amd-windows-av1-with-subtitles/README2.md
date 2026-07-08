@@ -4,7 +4,7 @@ A Python script that combines subtitle extraction with AMD AV1 hardware-accelera
 
 ## Notes
 
-- AMD 780M integrated graphics (and GPUs on the same architecture) have a resolution issue when using `av1_amf` to encode AV1 videos — for example, a 1920×1080 video may be encoded as 1920×1082. There is likely no workaround other than waiting for the next generation of GPUs to fix this bug. Additionally, encoding Twitch 160p videos always fails; only 360p and above can be encoded successfully.
+- AMD 780M integrated graphics (and GPUs on the same architecture) have a resolution issue when using `av1_amf` to encode AV1 videos — for example, a 1920×1080 video will be encoded as 1920×1082. There is likely no workaround other than waiting for the next generation of GPUs to fix this bug. Additionally, encoding Twitch 160p videos always fails; only 360p and above can be encoded successfully.
 
 - In `--preview` mode, `--cleanup-recoded` still takes effect and will delete existing recoded files whose originals still exist.
 
