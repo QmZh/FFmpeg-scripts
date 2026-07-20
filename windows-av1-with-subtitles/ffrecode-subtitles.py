@@ -139,6 +139,8 @@ def get_video_metadata(file_path):
         bitrate = int(format_data.get("bit_rate", 0)) if format_data.get("bit_rate") != "N/A" else 0
         duration = float(format_data.get("duration", 0))
 
+        has_embedded_cc = check_embedded_cc(file_path)
+
         return {
             "width": width,
             "height": height,
@@ -146,10 +148,28 @@ def get_video_metadata(file_path):
             "bitrate": bitrate,
             "duration": duration,
             "fps": video_stream.get("avg_frame_rate", "0/0"),
-            "has_separate_subs": has_separate_subs
+            "has_separate_subs": has_separate_subs,
+            "has_embedded_cc": has_embedded_cc
         }
     except (subprocess.CalledProcessError, json.JSONDecodeError, StopIteration, KeyError, ValueError):
         return None
+
+
+def check_embedded_cc(file_path):
+    """Checks for embedded Closed Captions using FFmpeg lavfi subcc filter."""
+    escaped_path = file_path.as_posix().replace("'", r"\'").replace(":", r"\:")
+    cmd = [
+        "ffmpeg",
+        "-f", "lavfi",
+        "-i", f"movie='{escaped_path}'[out0+subcc]",
+        "-f", "null",
+        "-"
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+        return "Subtitle: eia_608 (cc_dec)" in result.stderr
+    except Exception:
+        return False
 
 
 def extract_subtitles(file_path, logger):
@@ -185,15 +205,34 @@ def extract_subtitles(file_path, logger):
     except subprocess.CalledProcessError as e:
         logger.error(f"Subtitle extraction failed for {file_path}: {e.stderr}")
 
+    # Check if the extracted subtitle file is effectively empty
+    if output_path.exists() and output_path.stat().st_size <= 584:
+        logger.info(f"Extracted subtitle file is empty ({output_path.stat().st_size} bytes), removing.")
+        try:
+            output_path.unlink()
+        except (FileNotFoundError, PermissionError):
+            pass
 
-def calculate_cq(shorter_side):
-    """Auto-calculates CQ based on shorter side resolution."""
-    if shorter_side < 480: return 15
-    if shorter_side < 720: return 10
-    if shorter_side < 1080: return 8
-    if shorter_side < 1440: return 6
-    if shorter_side < 2160: return 4
-    return 2
+
+def calculate_cq(shorter_side, gpu_type="amd"):
+    """Auto-calculates CQ based on shorter side resolution and GPU type.
+    0 is treated as a special default quality and passed through unchanged."""
+    if gpu_type == "amd":
+        # AMD: 0 (default) - 51 (best)
+        if shorter_side < 480: return 15
+        if shorter_side < 720: return 10
+        if shorter_side < 1080: return 8
+        if shorter_side < 1440: return 6
+        if shorter_side < 2160: return 4
+        return 2
+
+    # NVIDIA: 0 (default) - 51 (worst)
+    if shorter_side < 480: return 34
+    if shorter_side < 720: return 36
+    if shorter_side < 1080: return 38
+    if shorter_side < 1440: return 42
+    if shorter_side < 2160: return 46
+    return 49
 
 
 def is_suitable_for_recoding(full, meta):
@@ -212,8 +251,8 @@ def is_suitable_for_recoding(full, meta):
     return False
 
 
-def recode_video(in_path, out_path, cq, fps, preview, logger, stop_event):
-    """Recodes video using AV1 AMF hardware acceleration."""
+def recode_video(in_path, out_path, cq, fps, preview, logger, stop_event, gpu_type):
+    """Recodes video using AV1 hardware acceleration (AMD or NVIDIA)."""
     if stop_event.is_set():
         return False, False
 
@@ -226,14 +265,25 @@ def recode_video(in_path, out_path, cq, fps, preview, logger, stop_event):
     if fps:
         cmd.extend(["-r", str(fps)])
 
-    cmd.extend([
-        "-c:v", "av1_amf",
-        "-rc", "qvbr",
-        "-qvbr_quality_level", str(cq),
-        "-latency", "lowest_latency",
-        "-c:a", "copy",
-        str(out_path)
-    ])
+    if gpu_type == "nvidia":
+        cmd.extend([
+            "-c:v", "av1_nvenc",
+            "-cq", str(cq),
+            "-b:v", "0",
+            "-c:a", "copy",
+            "-preset", "p7",
+            "-multipass", "fullres",
+            str(out_path)
+        ])
+    else:
+        cmd.extend([
+            "-c:v", "av1_amf",
+            "-rc", "qvbr",
+            "-qvbr_quality_level", str(cq),
+            "-latency", "lowest_latency",
+            "-c:a", "copy",
+            str(out_path)
+        ])
 
     if preview:
         logger.info(f"PREVIEW: Would execute: {' '.join(cmd)}")
@@ -241,7 +291,38 @@ def recode_video(in_path, out_path, cq, fps, preview, logger, stop_event):
 
     try:
         logger.info(f"Recoding: {in_path} -> {out_path} (CQ: {cq})")
-        subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+
+        # Watchdog thread: watches stop_event and kills ffmpeg if triggered,
+        # so the worker doesn't block forever on proc.communicate().
+        def _stop_watchdog():
+            stop_event.wait()
+            logger.info(f"Stop signaled while recoding {in_path}. Terminating FFmpeg...")
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                logger.info(f"Force-killing FFmpeg for {in_path}...")
+                proc.kill()
+                proc.wait()
+
+        wd = threading.Thread(target=_stop_watchdog, daemon=True)
+        wd.start()
+
+        try:
+            stdout, stderr = proc.communicate()
+        except KeyboardInterrupt:
+            logger.info(f"Interrupted while recoding {in_path}. Terminating FFmpeg...")
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                logger.info(f"Force-killing FFmpeg for {in_path}...")
+                proc.kill()
+                proc.wait()
+            raise
+        if proc.returncode != 0:
+            raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
         return True, False
     except subprocess.CalledProcessError as e:
         stderr = e.stderr or ""
@@ -365,7 +446,7 @@ def process_single_file(file_path, args, logger, stop_event):
         return False, False
 
     # Action 3: Determine CQ
-    cq = int(args.cq) if args.cq else calculate_cq(meta["shorter_side"])
+    cq = int(args.cq) if args.cq else calculate_cq(meta["shorter_side"], args.gpu)
 
     # Filter 4: Duplicate check
     existing_pattern = re.compile(rf"{re.escape(basename)}_(cq|q|fps)-.*\.mp4$")
@@ -384,7 +465,7 @@ def process_single_file(file_path, args, logger, stop_event):
 
     # Action 4: Recode
     try:
-        success, disk_full = recode_video(file_path, out_path, cq, args.fps, args.preview, logger, stop_event)
+        success, disk_full = recode_video(file_path, out_path, cq, args.fps, args.preview, logger, stop_event, args.gpu)
     except FileNotFoundError:
         logger.warning(f"File disappeared during recoding: {file_path}")
         return False, False
@@ -490,7 +571,8 @@ def run_processing_cycle(args, root_dir, logger, low_space_mode=False):
     disk_full = False
 
     # Use ThreadPoolExecutor for batch processing
-    with ThreadPoolExecutor(max_workers=args.batch_size) as executor:
+    executor = ThreadPoolExecutor(max_workers=args.batch_size)
+    try:
         tasks = []
         for f in files:
             try:
@@ -515,6 +597,12 @@ def run_processing_cycle(args, root_dir, logger, low_space_mode=False):
                     recoded_any = True
         except Exception as e:
             logger.error(f"Unexpected error in processing pool: {e}")
+    except KeyboardInterrupt:
+        stop_event.set()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+
+    executor.shutdown(wait=False, cancel_futures=True)
 
     return recoded_any, disk_full
 
@@ -526,14 +614,15 @@ def main():
     parser.add_argument("--include", "-i", default="", help="Include pattern")
     parser.add_argument("--dir", "-wd", default=".", help="Working directory")
     parser.add_argument("--types", "-t", default="flv,ts,mp4", help="Input file extensions (comma-separated)")
-    parser.add_argument("--cq", "-q", help="Fixed qvbr_quality_level value (1-51, larger for better video quality but larger file size)")
+    parser.add_argument("--gpu", choices=["amd", "nvidia"], default="amd", help="GPU encoder to use (default: amd)")
+    parser.add_argument("--cq", "-q", help="Fixed CQ value (AMD: 1-51 higher=better; NVIDIA inverts this scale)")
     parser.add_argument("--fps", "-f", help="Fixed FPS")
     parser.add_argument("--all", "-a", default="n", help="Process all files regardless of size (y/n)")
     parser.add_argument("--delete", "-de", default="y", help="Delete original on success (y/n)")
     parser.add_argument("--ratio", "-r", type=float, default=0.7, help="Compression ratio threshold")
     parser.add_argument("--sort", "-s", choices=["name", "time", "size"], default="size", help="Sort order")
     parser.add_argument("--batch-size", "-b", type=int, default=1, help="Number of files to process in parallel (default: 1)")
-    parser.add_argument("--loop", "-l", action="store_true", help="Loop indefinitely, scanning for new files every 60 seconds")
+    parser.add_argument("--loop", "-l", action="store_true", help="Loop indefinitely")
     parser.add_argument("--verbose", "-v", action="store_true", help="Output logs for skipped files")
     parser.add_argument("--yes", "-y", action="store_true", help="Bypass confirmation prompts for deletions")
 
@@ -553,6 +642,15 @@ def main():
         low_space_mode = False
         while True:
             refresh_windows_path()
+
+            if args.verbose:
+                try:
+                    ff_ver = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, encoding='utf-8')
+                    if ff_ver.returncode == 0:
+                        ver_line = ff_ver.stdout.splitlines()[0]
+                        logger.info(f"FFmpeg version: {ver_line}")
+                except Exception as e:
+                    logger.warning(f"Could not determine FFmpeg version: {e}")
 
             if args.cleanup_recoded:
                 cleanup_recoded_files(root_dir, logger, args, args.preview)
