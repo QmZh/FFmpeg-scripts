@@ -155,30 +155,102 @@ def get_video_metadata(file_path):
         return None
 
 
+_lavfi_rename_lock = threading.Lock()
+
+
+def _needs_lavfi_workaround(path):
+    """Check if a path contains characters that break FFmpeg's lavfi movie demuxer.
+
+    The movie demuxer embeds the path inside a filtergraph string
+    (movie='path'[flags]) where [, ], ', and \\ have special meaning.
+    Even when escaped, some combinations are unreliable across FFmpeg versions.
+    """
+    name = path.name
+    if any(c in name for c in ("'", "[", "]", "\\")):
+        return True
+    return False
+
+
+# Map each lavfi-problematic character to a unique replacement so that
+# two files differing only in which special character they contain
+# (e.g. file' vs file[) get distinct temporary names.
+_LAVFI_CHAR_MAP = {
+    "'": "SingleQuote",
+    "[": "OpenBracket",
+    "]": "CloseBracket",
+    "\\": "Backslash",
+}
+
+
+def _make_safe_path(file_path):
+    """Create a temporary safe path in the same directory.
+
+    Each special character is replaced with a unique identifier so that
+    files like file' and file[ produce distinct temporary names.
+    """
+    parent = file_path.parent
+    stem = file_path.stem
+    for ch, repl in _LAVFI_CHAR_MAP.items():
+        stem = stem.replace(ch, repl)
+    return parent / f"__tmp_{stem}_{file_path.suffix}"
+
+
 def check_embedded_cc(file_path):
-    """Checks for embedded Closed Captions using FFmpeg lavfi subcc filter."""
-    escaped_path = file_path.as_posix().replace("'", r"\'").replace(":", r"\:")
-    cmd = [
-        "ffmpeg",
-        "-f", "lavfi",
-        "-i", f"movie='{escaped_path}'[out0+subcc]",
-        "-f", "null",
-        "-"
-    ]
+    """Checks for embedded Closed Captions using FFmpeg lavfi subcc filter.
+
+    If the filename contains characters that break lavfi parsing, the file is
+    temporarily renamed to a safe name, processed, then renamed back.
+    """
+    if not _needs_lavfi_workaround(file_path):
+        escaped = file_path.as_posix().replace("'", r"\'").replace(":", r"\:")
+        cmd = [
+            "ffmpeg",
+            "-f", "lavfi",
+            "-i", f"movie='{escaped}'[out0+subcc]",
+            "-f", "null",
+            "-"
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            return "Subtitle: eia_608 (cc_dec)" in result.stderr
+        except Exception:
+            return False
+
+    # Rename to safe path, process, rename back
+    safe_path = _make_safe_path(file_path)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
-        return "Subtitle: eia_608 (cc_dec)" in result.stderr
-    except Exception:
+        with _lavfi_rename_lock:
+            file_path.rename(safe_path)
+        try:
+            escaped = safe_path.as_posix().replace("'", r"\'").replace(":", r"\:")
+            cmd = [
+                "ffmpeg",
+                "-f", "lavfi",
+                "-i", f"movie='{escaped}'[out0+subcc]",
+                "-f", "null",
+                "-"
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            return "Subtitle: eia_608 (cc_dec)" in result.stderr
+        except Exception:
+            return False
+        finally:
+            with _lavfi_rename_lock:
+                safe_path.rename(file_path)
+    except OSError:
         return False
 
 
 def extract_subtitles(file_path, logger):
     """
-    Extracts subtitles from a video file using ffmpeg movie filter.
-    Mirrors the logic from extract_subtitles.py.
+    Extracts subtitles from a video file using ffmpeg lavfi movie filter.
 
     Uses the +subcc flag to ensure both separate subtitle streams and
     embedded Closed Captions (CC) are extracted.
+
+    If the filename contains characters that break lavfi parsing (', [, ]),
+    the file is temporarily renamed to a safe name, processed, then renamed back.
+    This avoids the extra disk space a copy would require.
     """
     output_path = file_path.with_suffix(".ssa")
 
@@ -186,24 +258,52 @@ def extract_subtitles(file_path, logger):
         logger.info(f"Subtitle file already exists for {file_path.name}, skipping extraction.")
         return
 
-    # POSIX path and escaping for lavfi movie filter on Windows
-    escaped_path = file_path.as_posix().replace("'", r"\'").replace(":", r"\:")
+    logger.info(f"Extracting subtitles: {file_path}")
 
-    cmd = [
-        "ffmpeg",
-        "-n",
-        "-v", "warning",
-        "-f", "lavfi",
-        "-i", f"movie='{escaped_path}'[out0+subcc]",
-        "-map", "s",
-        str(output_path)
-    ]
+    if not _needs_lavfi_workaround(file_path):
+        escaped = file_path.as_posix().replace("'", r"\'").replace(":", r"\:")
+        cmd = [
+            "ffmpeg",
+            "-n",
+            "-v", "warning",
+            "-f", "lavfi",
+            "-i", f"movie='{escaped}'[out0+subcc]",
+            "-map", "s",
+            str(output_path)
+        ]
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Subtitle extraction failed for {file_path}: {e.stderr}")
+        return
 
+    # Rename to safe path, process, rename back
+    safe_path = _make_safe_path(file_path)
     try:
-        logger.info(f"Extracting subtitles: {file_path}")
-        subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Subtitle extraction failed for {file_path}: {e.stderr}")
+        with _lavfi_rename_lock:
+            file_path.rename(safe_path)
+        try:
+            escaped = safe_path.as_posix().replace("'", r"\'").replace(":", r"\:")
+            cmd = [
+                "ffmpeg",
+                "-n",
+                "-v", "warning",
+                "-f", "lavfi",
+                "-i", f"movie='{escaped}'[out0+subcc]",
+                "-map", "s",
+                str(output_path)
+            ]
+            subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Subtitle extraction failed for {file_path}: {e.stderr}")
+        finally:
+            with _lavfi_rename_lock:
+                try:
+                    safe_path.rename(file_path)
+                except OSError as exc:
+                    logger.error(f"Failed to rename back {safe_path} -> {file_path}: {exc}")
+    except OSError as exc:
+        logger.error(f"Failed to rename {file_path} for subtitle extraction: {exc}")
 
     # Check if the extracted subtitle file is effectively empty
     if output_path.exists() and output_path.stat().st_size <= 584:
