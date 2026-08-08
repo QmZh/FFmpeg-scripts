@@ -119,7 +119,8 @@ def get_video_metadata(file_path):
     ]
     try:
         # Use encoding='utf-8' to avoid UnicodeDecodeError on Windows (GBK)
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True,
+                                encoding='utf-8', timeout=30)
         if result.stdout:
             data = json.loads(result.stdout)
         else:
@@ -151,11 +152,19 @@ def get_video_metadata(file_path):
             "has_separate_subs": has_separate_subs,
             "has_embedded_cc": has_embedded_cc
         }
+    except subprocess.TimeoutExpired:
+        return None
     except (subprocess.CalledProcessError, json.JSONDecodeError, StopIteration, KeyError, ValueError):
         return None
 
 
 _lavfi_rename_lock = threading.Lock()
+
+# Thread-safe sets tracking files currently being written by ffmpeg.
+# Used for cleanup on Ctrl+C so partial outputs are removed.
+_in_progress_lock = threading.Lock()
+_in_progress_subs = set()       # .ssa files mid-extraction
+_in_progress_recodes = set()    # output mp4 files mid-recoding
 
 
 def _needs_lavfi_workaround(path):
@@ -211,8 +220,10 @@ def check_embedded_cc(file_path):
             "-"
         ]
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', timeout=15)
             return "Subtitle: eia_608 (cc_dec)" in result.stderr
+        except subprocess.TimeoutExpired:
+            return False
         except Exception:
             return False
 
@@ -230,8 +241,10 @@ def check_embedded_cc(file_path):
                 "-f", "null",
                 "-"
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', timeout=15)
             return "Subtitle: eia_608 (cc_dec)" in result.stderr
+        except subprocess.TimeoutExpired:
+            return False
         except Exception:
             return False
         finally:
@@ -241,7 +254,7 @@ def check_embedded_cc(file_path):
         return False
 
 
-def extract_subtitles(file_path, logger):
+def extract_subtitles(file_path, logger, duration=0):
     """
     Extracts subtitles from a video file using ffmpeg lavfi movie filter.
 
@@ -251,6 +264,8 @@ def extract_subtitles(file_path, logger):
     If the filename contains characters that break lavfi parsing (', [, ]),
     the file is temporarily renamed to a safe name, processed, then renamed back.
     This avoids the extra disk space a copy would require.
+
+    duration: approximate video duration in seconds (used to set a timeout ceiling).
     """
     output_path = file_path.with_suffix(".ssa")
 
@@ -260,30 +275,16 @@ def extract_subtitles(file_path, logger):
 
     logger.info(f"Extracting subtitles: {file_path}")
 
-    if not _needs_lavfi_workaround(file_path):
-        escaped = file_path.as_posix().replace("'", r"\'").replace(":", r"\:")
-        cmd = [
-            "ffmpeg",
-            "-n",
-            "-v", "warning",
-            "-f", "lavfi",
-            "-i", f"movie='{escaped}'[out0+subcc]",
-            "-map", "s",
-            str(output_path)
-        ]
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Subtitle extraction failed for {file_path}: {e.stderr}")
-        return
+    # Timeout: 0.5× duration + 300 s buffer, with a floor of 300 s.
+    extract_timeout = max(int(duration * 0.5) + 300, 300)
 
-    # Rename to safe path, process, rename back
-    safe_path = _make_safe_path(file_path)
+    # Track this output so Ctrl+C cleanup can remove partial files
+    with _in_progress_lock:
+        _in_progress_subs.add(output_path)
+
     try:
-        with _lavfi_rename_lock:
-            file_path.rename(safe_path)
-        try:
-            escaped = safe_path.as_posix().replace("'", r"\'").replace(":", r"\:")
+        if not _needs_lavfi_workaround(file_path):
+            escaped = file_path.as_posix().replace("'", r"\'").replace(":", r"\:")
             cmd = [
                 "ffmpeg",
                 "-n",
@@ -293,17 +294,48 @@ def extract_subtitles(file_path, logger):
                 "-map", "s",
                 str(output_path)
             ]
-            subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Subtitle extraction failed for {file_path}: {e.stderr}")
-        finally:
+            try:
+                subprocess.run(cmd, capture_output=True, text=True, check=True,
+                               encoding='utf-8', timeout=extract_timeout)
+            except subprocess.TimeoutExpired:
+                logger.error(f"Subtitle extraction timed out after {extract_timeout}s for {file_path} (corrupted?).")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Subtitle extraction failed for {file_path}: {e.stderr}")
+            return
+
+        # Rename to safe path, process, rename back
+        safe_path = _make_safe_path(file_path)
+        try:
             with _lavfi_rename_lock:
-                try:
-                    safe_path.rename(file_path)
-                except OSError as exc:
-                    logger.error(f"Failed to rename back {safe_path} -> {file_path}: {exc}")
-    except OSError as exc:
-        logger.error(f"Failed to rename {file_path} for subtitle extraction: {exc}")
+                file_path.rename(safe_path)
+            try:
+                escaped = safe_path.as_posix().replace("'", r"\'").replace(":", r"\:")
+                cmd = [
+                    "ffmpeg",
+                    "-n",
+                    "-v", "warning",
+                    "-f", "lavfi",
+                    "-i", f"movie='{escaped}'[out0+subcc]",
+                    "-map", "s",
+                    str(output_path)
+                ]
+                subprocess.run(cmd, capture_output=True, text=True, check=True,
+                               encoding='utf-8', timeout=extract_timeout)
+            except subprocess.TimeoutExpired:
+                logger.error(f"Subtitle extraction timed out after {extract_timeout}s for {file_path} (corrupted?).")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Subtitle extraction failed for {file_path}: {e.stderr}")
+            finally:
+                with _lavfi_rename_lock:
+                    try:
+                        safe_path.rename(file_path)
+                    except OSError as exc:
+                        logger.error(f"Failed to rename back {safe_path} -> {file_path}: {exc}")
+        except OSError as exc:
+            logger.error(f"Failed to rename {file_path} for subtitle extraction: {exc}")
+    finally:
+        with _in_progress_lock:
+            _in_progress_subs.discard(output_path)
 
     # Check if the extracted subtitle file is effectively empty
     if output_path.exists() and output_path.stat().st_size <= 584:
@@ -351,8 +383,11 @@ def is_suitable_for_recoding(full, meta):
     return False
 
 
-def recode_video(in_path, out_path, cq, fps, preview, logger, stop_event, gpu_type):
-    """Recodes video using AV1 hardware acceleration (AMD or NVIDIA)."""
+def recode_video(in_path, out_path, cq, fps, preview, logger, stop_event, gpu_type, duration=0):
+    """Recodes video using AV1 hardware acceleration (AMD or NVIDIA).
+
+    duration: approximate video duration in seconds (used to set a timeout ceiling).
+    """
     if stop_event.is_set():
         return False, False
 
@@ -391,39 +426,64 @@ def recode_video(in_path, out_path, cq, fps, preview, logger, stop_event, gpu_ty
 
     try:
         logger.info(f"Recoding: {in_path} -> {out_path} (CQ: {cq})")
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
 
-        # Watchdog thread: watches stop_event and kills ffmpeg if triggered,
-        # so the worker doesn't block forever on proc.communicate().
-        def _stop_watchdog():
-            stop_event.wait()
-            logger.info(f"Stop signaled while recoding {in_path}. Terminating FFmpeg...")
-            proc.terminate()
-            try:
-                proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                logger.info(f"Force-killing FFmpeg for {in_path}...")
-                proc.kill()
-                proc.wait()
-
-        wd = threading.Thread(target=_stop_watchdog, daemon=True)
-        wd.start()
+        # Track this output so Ctrl+C cleanup can remove partial files
+        with _in_progress_lock:
+            _in_progress_recodes.add(out_path)
+        marker = out_path.with_suffix(out_path.suffix + ".recording")
+        marker.touch()
 
         try:
-            stdout, stderr = proc.communicate()
-        except KeyboardInterrupt:
-            logger.info(f"Interrupted while recoding {in_path}. Terminating FFmpeg...")
-            proc.terminate()
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+
+            # Watchdog thread: watches stop_event and kills ffmpeg if triggered,
+            # so the worker doesn't block forever on proc.communicate().
+            def _stop_watchdog():
+                stop_event.wait()
+                logger.info(f"Stop signaled while recoding {in_path}. Terminating FFmpeg...")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    logger.info(f"Force-killing FFmpeg for {in_path}...")
+                    proc.kill()
+                    proc.wait()
+
+            wd = threading.Thread(target=_stop_watchdog, daemon=True)
+            wd.start()
+
+            # Timeout: 2× duration + 120 s buffer (encoders can be slower than realtime),
+            # with a hard floor of 600 s so short files don't expire instantly.
+            communicate_timeout = max(int(duration * 2) + 120, 600)
+
             try:
-                proc.wait(timeout=3)
+                stdout, stderr = proc.communicate(timeout=communicate_timeout)
             except subprocess.TimeoutExpired:
-                logger.info(f"Force-killing FFmpeg for {in_path}...")
+                logger.error(f"Recoding timed out after {communicate_timeout}s for {in_path} (corrupted input?). Killing FFmpeg.")
                 proc.kill()
                 proc.wait()
-            raise
-        if proc.returncode != 0:
-            raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
-        return True, False
+                return False, False
+            except KeyboardInterrupt:
+                logger.info(f"Interrupted while recoding {in_path}. Terminating FFmpeg...")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    logger.info(f"Force-killing FFmpeg for {in_path}...")
+                    proc.kill()
+                    proc.wait()
+                raise
+            if proc.returncode != 0:
+                raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
+            return True, False
+        finally:
+            # Clean up tracking regardless of outcome
+            with _in_progress_lock:
+                _in_progress_recodes.discard(out_path)
+            try:
+                marker.unlink()
+            except FileNotFoundError:
+                pass
     except subprocess.CalledProcessError as e:
         stderr = e.stderr or ""
         if "No space left on device" in stderr or "Disk full" in stderr:
@@ -486,6 +546,70 @@ def cleanup_recoded_files(root_dir, logger, args, preview):
         logger.info(f"Cleaned up {count} recoded files.")
 
 
+def cleanup_interrupted_files(root_dir, logger):
+    """Clean up artifacts left behind by interrupted ffmpeg processes.
+
+    On Ctrl+C, ffmpeg workers may be killed mid-write.  This function:
+    - renames __tmp_* files back to their original names (lavfi workaround),
+    - deletes partial subtitle files (.ssa) that were mid-extraction,
+    - deletes partial recoded video files and their .recording marker files.
+    """
+    cleaned = 0
+
+    # 1) Rename __tmp_* files back to their original names
+    for tmp_file in root_dir.rglob("__tmp_*"):
+        if not tmp_file.is_file():
+            continue
+        # Reverse the naming: __tmp_{stem}_{suffix} -> {stem}{suffix}
+        name = tmp_file.name
+        if name.startswith("__tmp_") and "_" in name[6:]:
+            restored = name[6:]  # strip "__tmp_"
+            restored_path = tmp_file.parent / restored
+            try:
+                tmp_file.rename(restored_path)
+                logger.info(f"CLEANUP: Restored {tmp_file.name} -> {restored_path.name}")
+                cleaned += 1
+            except OSError as e:
+                logger.error(f"CLEANUP: Failed to restore {tmp_file}: {e}")
+
+    # 2) Delete partial subtitle files tracked during extraction
+    with _in_progress_lock:
+        for sub_path in list(_in_progress_subs):
+            if sub_path.exists():
+                try:
+                    sub_path.unlink()
+                    logger.info(f"CLEANUP: Removed partial subtitle {sub_path.name}")
+                    cleaned += 1
+                except OSError as e:
+                    logger.error(f"CLEANUP: Failed to remove {sub_path}: {e}")
+            _in_progress_subs.discard(sub_path)
+
+    # 3) Delete partial recoded files tracked during recoding
+    with _in_progress_lock:
+        for rec_path in list(_in_progress_recodes):
+            marker = rec_path.with_suffix(rec_path.suffix + ".recording")
+            removed = False
+            if marker.exists():
+                try:
+                    marker.unlink()
+                    removed = True
+                except OSError:
+                    pass
+            if rec_path.exists() and removed:
+                try:
+                    rec_path.unlink()
+                    logger.info(f"CLEANUP: Removed partial recoded file {rec_path.name}")
+                    cleaned += 1
+                except OSError as e:
+                    logger.error(f"CLEANUP: Failed to remove {rec_path}: {e}")
+            _in_progress_recodes.discard(rec_path)
+
+    if cleaned:
+        logger.info(f"CLEANUP: Removed {cleaned} interrupted artifact(s).")
+    else:
+        logger.info("CLEANUP: No interrupted artifacts found.")
+
+
 def process_single_file(file_path, args, logger, stop_event):
     """Processes a single video file: extract subtitles, probe, and recode if suitable."""
     if stop_event.is_set():
@@ -519,17 +643,7 @@ def process_single_file(file_path, args, logger, stop_event):
         logger.warning(f"File disappeared while checking size: {file_path}")
         return False, False
 
-    # Action 1: Extract Subtitles
-    if not args.preview:
-        try:
-            extract_subtitles(file_path, logger)
-        except FileNotFoundError:
-            logger.warning(f"File disappeared during subtitle extraction: {file_path}")
-            return False, False
-    else:
-        logger.info(f"PREVIEW: Skipping subtitle extraction for {file_path}")
-
-    # Action 2: Probe Metadata
+    # Action 1: Probe Metadata (before subtitle extraction so we know the duration)
     try:
         meta = get_video_metadata(file_path)
     except FileNotFoundError:
@@ -538,6 +652,16 @@ def process_single_file(file_path, args, logger, stop_event):
     if not meta:
         logger.warning(f"Could not probe metadata for {file_path}. Skipping.")
         return False, False
+
+    # Action 2: Extract Subtitles (after probe so we can use duration for timeout)
+    if not args.preview:
+        try:
+            extract_subtitles(file_path, logger, meta["duration"])
+        except FileNotFoundError:
+            logger.warning(f"File disappeared during subtitle extraction: {file_path}")
+            return False, False
+    else:
+        logger.info(f"PREVIEW: Skipping subtitle extraction for {file_path}")
 
     # Decision: Suitability
     if not is_suitable_for_recoding(args.all, meta):
@@ -565,7 +689,7 @@ def process_single_file(file_path, args, logger, stop_event):
 
     # Action 4: Recode
     try:
-        success, disk_full = recode_video(file_path, out_path, cq, args.fps, args.preview, logger, stop_event, args.gpu)
+        success, disk_full = recode_video(file_path, out_path, cq, args.fps, args.preview, logger, stop_event, args.gpu, meta["duration"])
     except FileNotFoundError:
         logger.warning(f"File disappeared during recoding: {file_path}")
         return False, False
@@ -745,7 +869,7 @@ def main():
 
             if args.verbose:
                 try:
-                    ff_ver = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, encoding='utf-8')
+                    ff_ver = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, encoding='utf-8', timeout=10)
                     if ff_ver.returncode == 0:
                         ver_line = ff_ver.stdout.splitlines()[0]
                         logger.info(f"FFmpeg version: {ver_line}")
@@ -774,7 +898,9 @@ def main():
 
             interactive_sleep(wait_minutes * 60)
     except KeyboardInterrupt:
-        logger.info("Process interrupted by user. Exiting...")
+        logger.info("Process interrupted by user. Cleaning up interrupted files...")
+        cleanup_interrupted_files(root_dir, logger)
+        logger.info("Exiting...")
 
     logger.info(f"Finished processing. Log saved to {log_file}")
 
